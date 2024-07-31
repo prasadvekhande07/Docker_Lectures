@@ -918,47 +918,232 @@ Your notes on Docker Registry and Docker Swarm look thorough! Here’s a quick s
      ```
 
 ### Docker Swarm
-1. **Setup:**
-   - **Install Docker:** Use [get.docker.com](https://get.docker.com) on all machines.
-   - **Change Hostnames (Optional):**
+Here's a complete and detailed guide on Docker Swarm for container orchestration, including all steps and commands:
+
+---
+
+### **Container Orchestration**
+
+**Definition**: The process of running Docker containers in a distributed environment across multiple Docker host machines. Containers can run a single service and share resources even if they are on different hosts.
+
+**Tool**: Docker Swarm.
+
+### **Advantages of Docker Swarm**
+
+1. **Load Balancing**: Distributes traffic evenly across containers.
+2. **Scaling**: Adjusts the number of container replicas based on demand.
+3. **Rolling Updates**: Updates services incrementally to avoid downtime.
+4. **Failover Handling**: Manages node failures by redistributing tasks.
+
+---
+
+### **Setting Up Docker Swarm**
+
+1. **Prepare Machines**
+   - **Machines**: Manager, Worker1, Worker2
+   - **Install Docker**: On all machines, run:
      ```bash
-     vim /etc/hostname
-     # Set hostname to Manager, Worker1, Worker2
-     init 6
+     curl -fsSL https://get.docker.com -o get-docker.sh
+     sudo sh get-docker.sh
      ```
-   - **Initialize Docker Swarm on Manager:**
+
+2. **Optional: Change Hostname on Manager**
+   - **Change Hostname**:
+     ```bash
+     sudo vim /etc/hostname
+     ```
+     Set the hostname to `Manager` and save (`:wq`).
+
+   - **Restart Machine**:
+     ```bash
+     sudo init 6
+     ```
+
+   - **Repeat** for Worker1 and Worker2, setting their hostnames accordingly.
+
+3. **Initialize Docker Swarm on Manager**
+   - **Connect to Manager**:
+     ```bash
+     sudo su -
+     ```
+   - **Initialize Swarm**:
      ```bash
      docker swarm init --advertise-addr <private_ip_of_manager>
      ```
-   - **Join Workers to the Swarm:**
+     Example:
      ```bash
-     docker swarm join --token <token> <manager_ip>:2377
+     docker swarm init --advertise-addr 172.31.27.151
+     ```
+   - **Copy the join command** provided in the output logs for joining workers.
+
+4. **Join Workers to Swarm**
+   - **Connect to Worker1**:
+     ```bash
+     sudo su -
+     ```
+   - **Execute Join Command**:
+     ```bash
+     docker swarm join --token <join_token> <manager_ip>:2377
+     ```
+     Example:
+     ```bash
+     docker swarm join --token SWMTKN-1-0etsmfa26vreeytq278q8ohhi73il7j1lpnrzzlowuld1r8yex-9x04pjmiq85jxjzjayzlglh1c 172.31.27.151:2377
      ```
 
-2. **Check Nodes:**
-   ```bash
-   docker node ls
-   ```
+   - **Repeat for Worker2**.
 
-### Additional Tips:
-- **To Scale Services:**
-  Use Docker Swarm's `scale` command to adjust the number of replicas for a service:
+---
+
+### **Managing Services**
+
+1. **Create Services**
+   - **Tomcat (5 replicas)**:
+     ```bash
+     docker service create --name webserver -p 9090:8080 --replicas 5 tomee
+     ```
+   - **MySQL (3 replicas)**:
+     ```bash
+     docker service create --name mydb --replicas 3 -e MYSQL_ROOT_PASSWORD=sunil mysql:5
+     ```
+
+2. **Check Service Status**
+   - **List Services**:
+     ```bash
+     docker service ls
+     ```
+   - **View Tasks**:
+     ```bash
+     docker service ps <service_name>
+     ```
+     Example:
+     ```bash
+     docker service ps webserver
+     ```
+
+3. **Scaling Services**
+   - **Create Service with 5 Replicas**:
+     ```bash
+     docker service create --name appserver -p 8080:80 --replicas 5 nginx
+     ```
+
+   - **Scale Service**
+     - **Increase Replicas**:
+       ```bash
+       docker service scale appserver=10
+       ```
+     - **Decrease Replicas**:
+       ```bash
+       docker service scale appserver=2
+       ```
+
+---
+
+### **Node Management**
+
+1. **Remove a Node**
+   - **Drain Node**:
+     ```bash
+     docker node update --availability drain <node_name>
+     ```
+     Example:
+     ```bash
+     docker node update --availability drain Worker1
+     ```
+
+   - **Leave Swarm**:
+     ```bash
+     docker swarm leave
+     ```
+
+2. **Add Node**
+   - **Generate Join Command**:
+     ```bash
+     docker swarm join-token worker
+     ```
+   - **Join Command**:
+     ```bash
+     docker swarm join --token <join_token> <manager_ip>:2377
+     ```
+
+   - **Promote/Demote Nodes**
+     - **Promote**:
+       ```bash
+       docker node promote <worker_name>
+       ```
+     - **Demote**:
+       ```bash
+       docker node demote <manager_name>
+       ```
+
+---
+
+### **Rolling Updates and Rollbacks**
+
+1. **Rolling Update**
+   - **Create Redis Service (6 replicas)**:
+     ```bash
+     docker service create --name myredis --replicas 6 redis:3
+     ```
+
+   - **Update to Redis 4**:
+     ```bash
+     docker service update --image redis:4 myredis
+     ```
+
+   - **View Running Containers**:
+     ```bash
+     docker service ps myredis | grep -v Shutdown
+     ```
+
+2. **Rolling Rollback**
+   - **Rollback to Redis 3**:
+     ```bash
+     docker service update --rollback myredis
+     ```
+
+---
+
+### **Adding New Nodes**
+
+1. **To Add a Worker Node**:
+   - **Generate Join Token**:
+     ```bash
+     docker swarm join-token worker
+     ```
+   - **Join Command**:
+     ```bash
+     docker swarm join --token <join_token> <manager_ip>:2377
+     ```
+
+2. **To Add a Manager Node**:
+   - **Generate Join Token for Manager**:
+     ```bash
+     docker swarm join-token manager
+     ```
+   - **Join Command**:
+     ```bash
+     docker swarm join --token <join_token> <manager_ip>:2377
+     ```
+
+3. **Check Leadership**
+   - **View Leader**:
+     ```bash
+     docker node ls
+     ```
+
+   - **Automatic Leader Election**: Docker Swarm automatically selects a leader. If one manager goes down, another manager becomes the leader.
+
+---
+
+### **Deleting Services**
+
+- **Remove Services**:
   ```bash
-  docker service scale <service_name>=<number_of_replicas>
+  docker service rm <service_name>
+  ```
+  Example:
+  ```bash
+  docker service rm appserver mydb webserver
   ```
 
-- **To Deploy a Stack:**
-  Create a `docker-compose.yml` file and deploy it with:
-  ```bash
-  docker stack deploy -c docker-compose.yml <stack_name>
-  ```
-
-- **To Update Services:**
-  Perform rolling updates with:
-  ```bash
-  docker service update --image <new_image> <service_name>
-  ```
-
-Feel free to ask if you need more details on any of these topics!
-
-
+This guide covers the complete setup and management of Docker Swarm, including node management, service creation, scaling, and updates. Let me know if you need further details or assistance with specific aspects!
